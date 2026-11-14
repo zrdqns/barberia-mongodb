@@ -2,8 +2,9 @@ package com.barberia.citas.service;
 
 import com.barberia.citas.dto.HorarioDTORequest;
 import com.barberia.citas.model.Cita;
+import com.barberia.citas.model.DiaHorario;
 import com.barberia.citas.model.EstadoCita;
-import com.barberia.citas.model.Horario;
+import com.barberia.citas.model.HorarioSemanal;
 import com.barberia.citas.repository.CitaRepository;
 import com.barberia.citas.repository.HorarioRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -26,21 +28,20 @@ public class HorarioService {
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("H:mm");
     private static final DateTimeFormatter FECHA = DateTimeFormatter.ofPattern("d/MM 'a las' H:mm");
 
+    // Un solo documento en la colección "horario", con los siete días embebidos
     private final HorarioRepository horarioRepository;
     private final CitaRepository citaRepository;
 
-    public List<Horario> listar() {
-        return horarioRepository.findAllByOrderByDiaSemanaAsc();
-    }
-
-    public Horario buscar(int diaSemana) {
-        return horarioRepository.findById(diaSemana)
-                .orElseThrow(() -> new NoSuchElementException("El día de la semana va de 1 (lunes) a 7 (domingo)."));
+    public List<DiaHorario> listar() {
+        return semana().getDias().stream()
+                .sorted(Comparator.comparingInt(DiaHorario::getDiaSemana))
+                .toList();
     }
 
     // Cambia el horario de un día. Apertura y cierre en null: ese día no se atiende.
-    public synchronized Horario actualizar(int diaSemana, HorarioDTORequest request) {
-        Horario horario = buscar(diaSemana);
+    public synchronized DiaHorario actualizar(int diaSemana, HorarioDTORequest request) {
+        HorarioSemanal semana = semana();
+        DiaHorario dia = buscarDia(semana, diaSemana);
         LocalTime apertura = request.getApertura();
         LocalTime cierre = request.getCierre();
 
@@ -52,11 +53,11 @@ public class HorarioService {
         }
 
         // Las citas programadas de ese día de la semana tienen que seguir cabiendo en el horario
-        Horario nuevo = new Horario(diaSemana, apertura, cierre);
+        DiaHorario nuevo = new DiaHorario(diaSemana, apertura, cierre);
         List<Cita> porFuera = citaRepository.findByEstadoAndFechaHoraAfter(EstadoCita.PROGRAMADA, LocalDateTime.now()).stream()
                 .filter(cita -> cita.getFechaHora().getDayOfWeek().getValue() == diaSemana)
                 .filter(cita -> !cabe(nuevo, cita.getFechaHora(), cita.calcularFin()))
-                .sorted((a, b) -> a.getFechaHora().compareTo(b.getFechaHora()))
+                .sorted(Comparator.comparing(Cita::getFechaHora))
                 .toList();
         if (!porFuera.isEmpty()) {
             throw new IllegalStateException("Con ese horario quedarían por fuera " + porFuera.size()
@@ -65,33 +66,47 @@ public class HorarioService {
                     + ". Muévalas o cancélelas antes de cambiar el horario.");
         }
 
-        horario.setApertura(apertura);
-        horario.setCierre(cierre);
-        return horarioRepository.save(horario);
+        // Se cambia el día dentro de la semana y se guarda el documento completo
+        dia.setApertura(apertura);
+        dia.setCierre(cierre);
+        horarioRepository.save(semana);
+        return dia;
     }
 
     // Una cita debe empezar y terminar dentro del horario de su día
     public void validarAtencion(LocalDateTime inicio, LocalDateTime fin) {
-        int dia = inicio.getDayOfWeek().getValue();
-        Horario horario = horarioRepository.findById(dia).orElse(null);
+        int numero = inicio.getDayOfWeek().getValue();
+        DiaHorario dia = buscarDia(semana(), numero);
 
-        if (horario == null || !horario.abierto()) {
-            throw new IllegalArgumentException("La barbería no atiende los " + LOS_DIAS[dia] + ".");
+        if (!dia.abierto()) {
+            throw new IllegalArgumentException("La barbería no atiende los " + LOS_DIAS[numero] + ".");
         }
-        if (!cabe(horario, inicio, fin)) {
+        if (!cabe(dia, inicio, fin)) {
             long minutos = Duration.between(inicio, fin).toMinutes();
-            throw new IllegalArgumentException("Los " + LOS_DIAS[dia] + " la barbería atiende de "
-                    + horario.getApertura().format(HORA) + " a " + horario.getCierre().format(HORA)
+            throw new IllegalArgumentException("Los " + LOS_DIAS[numero] + " la barbería atiende de "
+                    + dia.getApertura().format(HORA) + " a " + dia.getCierre().format(HORA)
                     + ". Una cita de " + minutos + " minutos debe empezar entre las "
-                    + horario.getApertura().format(HORA) + " y las "
-                    + horario.getCierre().minusMinutes(minutos).format(HORA) + ".");
+                    + dia.getApertura().format(HORA) + " y las "
+                    + dia.getCierre().minusMinutes(minutos).format(HORA) + ".");
         }
     }
 
-    private boolean cabe(Horario horario, LocalDateTime inicio, LocalDateTime fin) {
-        return horario.abierto()
+    private HorarioSemanal semana() {
+        return horarioRepository.findById(HorarioSemanal.ID)
+                .orElseThrow(() -> new IllegalStateException("El horario de atención no está configurado."));
+    }
+
+    private DiaHorario buscarDia(HorarioSemanal semana, int diaSemana) {
+        return semana.getDias().stream()
+                .filter(dia -> dia.getDiaSemana() == diaSemana)
+                .findFirst()
+                .orElseThrow(() -> new NoSuchElementException("El día de la semana va de 1 (lunes) a 7 (domingo)."));
+    }
+
+    private boolean cabe(DiaHorario dia, LocalDateTime inicio, LocalDateTime fin) {
+        return dia.abierto()
                 && fin.toLocalDate().equals(inicio.toLocalDate())
-                && !inicio.toLocalTime().isBefore(horario.getApertura())
-                && !fin.toLocalTime().isAfter(horario.getCierre());
+                && !inicio.toLocalTime().isBefore(dia.getApertura())
+                && !fin.toLocalTime().isAfter(dia.getCierre());
     }
 }

@@ -3,8 +3,11 @@ package com.barberia.catalogo.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.Duration;
 
@@ -30,6 +33,17 @@ public class RestClientConfig {
         return RestClient.builder()
                 .baseUrl(apiCitasUrl)
                 .requestFactory(fabrica)
+                // Las citas están protegidas con JWT: se reenvía el token de quien hizo la petición
+                // original, así api-citas sabe que pregunta un usuario autenticado.
+                .requestInterceptor((peticion, cuerpo, ejecucion) -> {
+                    if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes atributos) {
+                        String token = atributos.getRequest().getHeader(HttpHeaders.AUTHORIZATION);
+                        if (token != null) {
+                            peticion.getHeaders().set(HttpHeaders.AUTHORIZATION, token);
+                        }
+                    }
+                    return ejecucion.execute(peticion, cuerpo);
+                })
                 .build();
     }
 }

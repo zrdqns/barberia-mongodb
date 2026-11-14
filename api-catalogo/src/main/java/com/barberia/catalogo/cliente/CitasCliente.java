@@ -17,8 +17,8 @@ public class CitasCliente {
     private final RestClient restClient;
 
     // GET {api.citas.url}/api/citas?{campo}={id}&estado=PROGRAMADA
-    // campo es servicioId o barberoId
-    public int contarProgramadas(String campo, int id) {
+    // campo es servicioId o barberoId. El token del administrador viaja en la petición (RestClientConfig).
+    public int contarProgramadas(String campo, String id) {
         List<Map<String, Object>> citas = restClient.get()
                 .uri("/api/citas?{campo}={id}&estado=PROGRAMADA", campo, id)
                 .retrieve()

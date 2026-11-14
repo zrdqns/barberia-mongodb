@@ -1,0 +1,11 @@
+{
+  "name": "@barberia/compartido",
+  "private": true,
+  "version": "3.0.0",
+  "description": "Piezas que comparten las dos interfaces: llamadas a las APIs, sesión, armazón, componentes y estilos",
+  "type": "module",
+  "peerDependencies": {
+    "lucide-react": "^1.49.0",
+    "react": "^19.3.0"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "barberia-interfaces",
+  "private": true,
+  "workspaces": [
+    "compartido",
+    "agenda",
+    "catalogo"
+  ],
+  "scripts": {
+    "agenda": "npm run dev -w interfaz-agenda",
+    "catalogo": "npm run dev -w interfaz-catalogo",
+    "build": "npm run build -w interfaz-agenda && npm run build -w interfaz-catalogo"
+  }
+}

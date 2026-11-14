@@ -1,11 +1,7 @@
 package com.barberia.citas.repository;
 
-import com.barberia.citas.model.Horario;
-import org.springframework.data.jpa.repository.JpaRepository;
+import com.barberia.citas.model.HorarioSemanal;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
-import java.util.List;
-
-public interface HorarioRepository extends JpaRepository<Horario, Integer> {
-
-    List<Horario> findAllByOrderByDiaSemanaAsc();
+public interface HorarioRepository extends MongoRepository<HorarioSemanal, String> {
 }

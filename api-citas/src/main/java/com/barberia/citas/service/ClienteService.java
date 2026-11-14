@@ -1,12 +1,13 @@
 package com.barberia.citas.service;
 
 import com.barberia.citas.dto.ClienteDTORequest;
+import com.barberia.citas.model.Cita;
 import com.barberia.citas.model.Cliente;
+import com.barberia.citas.model.EstadoCita;
 import com.barberia.citas.repository.CitaRepository;
 import com.barberia.citas.repository.ClienteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -15,12 +16,13 @@ import java.util.NoSuchElementException;
 @RequiredArgsConstructor
 public class ClienteService {
 
-    // Los datos viven en la tabla citas.cliente de la base de datos
+    // Los datos viven en la colección "clientes" de MongoDB.
+    // Las citas guardan una copia del nombre del cliente, así que se mantiene al día desde aquí.
     private final ClienteRepository clienteRepository;
     private final CitaRepository citaRepository;
 
     public Cliente crear(ClienteDTORequest request) {
-        validar(request, 0);
+        validarDocumentoLibre(request.getDocumento(), null);
 
         Cliente cliente = new Cliente();
         copiarDatos(request, cliente);
@@ -32,26 +34,40 @@ public class ClienteService {
         return clienteRepository.findAllByOrderByIdAsc();
     }
 
-    public Cliente buscarPorId(int id) {
+    public Cliente buscarPorId(String id) {
         return clienteRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("No se encontró un cliente con el ID " + id + "."));
     }
 
-    public Cliente actualizar(int id, ClienteDTORequest request) {
+    public Cliente actualizar(String id, ClienteDTORequest request) {
         Cliente cliente = buscarPorId(id);
-        validar(request, id);
+        validarDocumentoLibre(request.getDocumento(), id);
 
+        String nombreAnterior = cliente.getNombre();
         copiarDatos(request, cliente);
-        return clienteRepository.save(cliente);
+        Cliente guardado = clienteRepository.save(cliente);
+
+        // Si cambió el nombre, sus citas muestran el nuevo
+        if (!guardado.getNombre().equals(nombreAnterior)) {
+            List<Cita> suyas = citaRepository.findByClienteId(id);
+            suyas.forEach(cita -> cita.setClienteNombre(guardado.getNombre()));
+            citaRepository.saveAll(suyas);
+        }
+        return guardado;
     }
 
-    // Las dos operaciones van en una sola transacción: o se hacen ambas o ninguna.
-    // Las citas anteriores del cliente se conservan con su nombre.
-    @Transactional
-    public void eliminar(int id) {
+    // Un cliente con citas pendientes no se elimina. Sus citas anteriores se conservan con
+    // su nombre y dejan de apuntarle (clienteId = null) antes de borrarlo.
+    public void eliminar(String id) {
         Cliente cliente = buscarPorId(id);
 
-        citaRepository.desvincularCliente(id, cliente.getNombre());
+        if (citaRepository.existsByClienteIdAndEstado(id, EstadoCita.PROGRAMADA)) {
+            throw new IllegalStateException("El cliente tiene citas programadas. Cancélelas o elimínelas primero.");
+        }
+
+        List<Cita> suyas = citaRepository.findByClienteId(id);
+        suyas.forEach(cita -> cita.setClienteId(null));
+        citaRepository.saveAll(suyas);
         clienteRepository.delete(cliente);
     }
 
@@ -62,28 +78,11 @@ public class ClienteService {
         cliente.setCorreo(request.getCorreo() == null || request.getCorreo().isBlank() ? null : request.getCorreo().trim());
     }
 
-    // idActual es el cliente que se está editando (0 al crear),
+    // idActual es el cliente que se está editando (null al crear),
     // para no compararlo consigo mismo al revisar documentos repetidos.
-    private void validar(ClienteDTORequest request, int idActual) {
-        if (request.getNombre() == null || request.getNombre().isBlank()) {
-            throw new IllegalArgumentException("El nombre del cliente es obligatorio.");
-        }
-        if (request.getNombre().trim().length() > 100) {
-            throw new IllegalArgumentException("El nombre no puede pasar de 100 caracteres.");
-        }
-        if (request.getDocumento() == null || !request.getDocumento().trim().matches("\\d{6,10}")) {
-            throw new IllegalArgumentException("El documento debe tener entre 6 y 10 dígitos.");
-        }
-        if (request.getTelefono() == null || !request.getTelefono().trim().matches("\\d{7,10}")) {
-            throw new IllegalArgumentException("El teléfono debe tener entre 7 y 10 dígitos.");
-        }
-        // El correo es opcional, pero si se envía debe tener forma de correo
-        if (request.getCorreo() != null && !request.getCorreo().isBlank()
-                && !request.getCorreo().trim().matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) {
-            throw new IllegalArgumentException("El correo no tiene un formato válido.");
-        }
-        if (clienteRepository.existsByDocumentoAndIdNot(request.getDocumento().trim(), idActual)) {
-            throw new IllegalStateException("Ya existe un cliente con el documento " + request.getDocumento().trim() + ".");
+    private void validarDocumentoLibre(String documento, String idActual) {
+        if (clienteRepository.existsByDocumentoAndIdNot(documento.trim(), idActual)) {
+            throw new IllegalStateException("Ya existe un cliente con el documento " + documento.trim() + ".");
         }
     }
 }

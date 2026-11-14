@@ -9,6 +9,7 @@ import org.springframework.web.client.RestClient;
 
 // Se encarga de la comunicación con api-catalogo.
 // Es comunicación síncrona: api-citas espera la respuesta antes de continuar.
+// Las consultas del catálogo son públicas, así que no hace falta enviar token.
 @Component
 @RequiredArgsConstructor
 public class CatalogoCliente {
@@ -17,7 +18,7 @@ public class CatalogoCliente {
 
     // GET {api.catalogo.url}/api/servicios/{id}
     // Devuelve null si el catálogo responde 404.
-    public Servicio buscarServicio(int id) {
+    public Servicio buscarServicio(String id) {
         try {
             return restClient.get()
                     .uri("/api/servicios/{id}", id)
@@ -30,7 +31,7 @@ public class CatalogoCliente {
 
     // GET {api.catalogo.url}/api/barberos/{id}
     // Devuelve null si el catálogo responde 404.
-    public Barbero buscarBarbero(int id) {
+    public Barbero buscarBarbero(String id) {
         try {
             return restClient.get()
                     .uri("/api/barberos/{id}", id)

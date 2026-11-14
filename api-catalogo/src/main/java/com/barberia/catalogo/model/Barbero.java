@@ -1,24 +1,24 @@
 package com.barberia.catalogo.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
-// Tabla catalogo.barbero
-@Entity
+// Documento de la colección "barberos" en la base barberia_catalogo
+@Document(collection = "barberos")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class Barbero {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private String id;
     private String nombre;
+    // Índice único: no hay dos barberos con el mismo documento
+    @Indexed(unique = true)
     private String documento;
     private String telefono;
     private String especialidad;

@@ -1,6 +1,7 @@
 package com.barberia.citas.dto;
 
 import com.barberia.citas.model.EstadoCita;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -14,22 +15,34 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Schema(description = "Una cita con la copia de los datos del cliente, el servicio y el barbero")
 public class CitaDTOResponse {
 
-    private int id;
+    @Schema(example = "6735f0c2a1b2c3d4e5f60720")
+    private String id;
+    @Schema(example = "2026-11-20T10:00:00")
     private LocalDateTime fechaHora;
+    @Schema(example = "PROGRAMADA")
     private EstadoCita estado;
+    @Schema(example = "Prefiere máquina número 2")
     private String observaciones;
 
-    // null si el cliente se eliminó; la cita conserva su nombre
-    private Integer clienteId;
+    @Schema(description = "null si el cliente se eliminó; la cita conserva su nombre", example = "6735f0c2a1b2c3d4e5f60730")
+    private String clienteId;
+    @Schema(example = "Carlos Ramírez")
     private String clienteNombre;
 
-    private int servicioId;
+    @Schema(example = "6735f0c2a1b2c3d4e5f60718")
+    private String servicioId;
+    @Schema(example = "Corte clásico")
     private String servicioNombre;
+    @Schema(description = "Precio con que se agendó", example = "25000")
     private int precio;
+    @Schema(example = "30")
     private int duracionMinutos;
 
-    private int barberoId;
+    @Schema(example = "6735f0c2a1b2c3d4e5f6071a")
+    private String barberoId;
+    @Schema(example = "Andrés Rojas")
     private String barberoNombre;
 }
